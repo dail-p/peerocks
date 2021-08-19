@@ -1,11 +1,15 @@
 import json
 
+from django.db.models import Count, F, Value, IntegerField, ExpressionWrapper
+
 from django.shortcuts import (
     render,
 )
 from django.views import (
     View,
 )
+from recipes.models import Recipe, RecipeProduct, CookStep
+from users.models import CustomUser
 
 
 class Task1View(View):
@@ -14,11 +18,12 @@ class Task1View(View):
     """
 
     def get(self, request, **kwargs):
+        resipes = Recipe.objects.values('title', 'description', 'userrecipe__user')
+        # result = serializers.serialize("json", data)
         data = {
-            'response': 'some data task 1',
+            'response': list(resipes),
         }
-
-        return render(request, 'task.html', {'json_data': json.dumps(data)})
+        return render(request, 'task.html', {'json_data': json.dumps(data, ensure_ascii=False)})
 
 
 class Task2View(View):
@@ -28,11 +33,17 @@ class Task2View(View):
     """
 
     def get(self, request, **kwargs):
+        recipes = Recipe.objects.all()
+        result = []
+        for recipe in recipes:
+            products = list(RecipeProduct.objects.filter(recipe=recipe).values('product', 'count'))
+            steps = list(CookStep.objects.filter(recipe=recipe).values('title', 'description'))
+            result.append({'recipe': recipe.title, 'products_for_recipe': products, 'steps': steps})
         data = {
-            'response': 'some data task 2',
+            'response': result,
         }
 
-        return render(request, 'task.html', {'json_data': json.dumps(data)})
+        return render(request, 'task.html', {'json_data': json.dumps(data, ensure_ascii=False, default=str)})
 
 
 class Task3View(View):
@@ -42,11 +53,16 @@ class Task3View(View):
     """
 
     def get(self, request, **kwargs):
+        resipes = Recipe.objects \
+            .annotate(likes=Count('vote', filter=F('vote__is_like'))) \
+            .values('title', 'description', 'userrecipe__user', 'likes') \
+            .order_by('-likes')
+        result = list(resipes)
         data = {
-            'response': 'some data task 3',
+            'response': result,
         }
 
-        return render(request, 'task.html', {'json_data': json.dumps(data)})
+        return render(request, 'task.html', {'json_data': json.dumps(data, ensure_ascii=False, default=str)})
 
 
 class Task4View(View):
@@ -56,11 +72,20 @@ class Task4View(View):
     """
 
     def get(self, request, **kwargs):
+        authors = CustomUser.objects.filter(author__isnull=False) \
+                      .annotate(count_recipe=Count('userrecipe'), type=Value('Author')) \
+                      .values('email', 'count_recipe', 'type') \
+                      .order_by('-count_recipe')[:3]
+        users = CustomUser.objects.filter(author__isnull=True) \
+                    .annotate(count_vote=Count('vote'), type=Value('User')) \
+                    .values('email', 'count_vote', 'type') \
+                    .order_by('-count_vote')[:3]
+        result = list(authors) + list(users)
         data = {
-            'response': 'some data task 4',
+            'response': result,
         }
 
-        return render(request, 'task.html', {'json_data': json.dumps(data)})
+        return render(request, 'task.html', {'json_data': json.dumps(data, ensure_ascii=False, default=str)})
 
 
 class Task5View(View):
@@ -70,11 +95,13 @@ class Task5View(View):
     """
 
     def get(self, request, **kwargs):
+        recipe_id = 2
+        products = list(RecipeProduct.objects.filter(recipe_id=recipe_id)
+                        .annotate(count_five=ExpressionWrapper(5 * F('count'), output_field=IntegerField()))
+                        .values('product', 'count_five'))
+        result = {'recipe_id': recipe_id, 'products_for_five_dish': products}
         data = {
-            'response': 'some data task 5',
+            'response': result,
         }
 
-        return render(request, 'task.html', {'json_data': json.dumps(data)})
-
-
-
+        return render(request, 'task.html', {'json_data': json.dumps(data, ensure_ascii=False, default=str)})
